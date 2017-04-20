@@ -1,0 +1,821 @@
+---
+title: "Amazon Co-purchasing Network Metadata"
+output:
+  html_notebook: default
+  html_document: default
+---
+
+#1.Introduction
+
+The reason we chose this topic is that we believe the outcome of the project can be useful for the real world business company. Knowing about co-purchasing relationship between products helps to make prediction for co-purchasing products. Companies will interest in the relationship between item features and item sales, which can help them improve their revenue. This project can be a good practice for our future career.
+
+The dataset is from Stanford Network Analysis Platform (http://snap.stanford.edu/), which is a general purpose network analysis and graph mining library. We found it occasionally when we try to use Google to find anything interest us. After going through all the data sets it provides, we find the Amazon product co-purchasing network metadata contains the most valuable information, which allows us to do some interesting research. And since Amazon is the largest Internet-based retailer in the world by total sales and market capitalization, we choose Amazon product co-purchasing network metadata to dig deep to discover the relationship.
+
+We would like to explore the Amazon co-purchasing network and analyze the correlation between the features. We are interested in the correlation between sales rank and number of similar items for a given item, the correlation between average rating and sales rank, the correlation between categories and similar items and the overview of the whole co-purchasing network.
+
+Besides the report, we also created a light web presentation of our graphs for interaction. Please visit https://ya2366.shinyapps.io/eda_project_code_0417/ to see our interaction graphs.
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+#2.Team
+<br/>
+
+* Team member
+Yuting An UNI: ya2366
+Xinwei Li UNI:xl2601
+Qi Chen UNI: qc2217
+Sitong Zhou UNI: sz2629
+<br/>
+
+* Contribution
+In our project, Yuting analyzed the distribution of group information and sales rank among different groups, deploying R shiny onto webpage. Xinwei analyzed the co-purchasing network and implemented cluster algorithm on the network using Gephi. Sitong studied the distribution of average rating in different groups and the relationships between ratings and salesrank. Qi studied the category distribution among similar items and keywords pattern among co-purchasing items' subcategories.
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+#3.Analysis of Data Quality
+<br/>
+
+The data set we choose for our project is Amazon product co-purchasing network metadata, which was was collected by Stanford Network Analysis Project (http://snap.stanford.edu/), and through crawling Amazon website. The data set contains information of 548,552 different Amazon product. The format of raw data set is like this:
+
+* Id: Product id (number 0, ..., 548551)
+
+* ASIN: Amazon Standard Identification Number
+
+* title: Name/title of the product
+
+* group: Product group (Book, DVD, Video or Music)
+
+* salesrank: Amazon Salesrank 
+
+* similar: ASINs of co-purchased products (people who buy X also buy Y)
+
+* categories: Location in product category hierarchy to which the product belongs (separated by |, category id in [])
+
+* reviews: Product review information: time, user id, rating, total number of votes on the review, total number of helpfulness votes (how many people found the review to be helpful)
+
+<br/>
+
+According to our analysis, we believe that this data set include two part information: metadata for items and co-purchasing network.
+
+First,let's take a look at the metadata of items. Here is the basic dataset statistics from SNAP:
+
+|Dataset Statistics                    |
+|----------------------------|---------|
+|Products                    |548,552  |
+|Product-Project Edges       |1,788,725|
+|Reviews                     |7,781,990|
+|Product category memberships|2,509,699|
+
+
+|Product Group Statistic               |
+|----------------------------|---------|
+|Books	                     | 393561  |
+|DVDs	                       | 19828   |
+|Music CDs                   | 103144  |
+|Videos	                     | 26132   |
+
+<br/>
+
+After going through and cleaning data, we generate a groups bar plot with more details:
+
+
+```{r,warning=FALSE, message=FALSE}
+library(ggplot2)
+library(readr)
+library(tidyverse)
+library(dplyr)
+output <- read.csv("./data/group.csv")
+ggplot(output, aes(x=group)) + geom_bar(aes(color=group,fill=group))+theme(axis.text.x=element_text(angle=90,hjust=1))
+
+```
+<br/>
+
+Apart from the four main groups, there are 6 tiny groups: Baby Product, CE, Software, Sports, Toy, Video Games.The book group have the largest count, which is around 400,000.
+<br>
+The data set also provide categorical information for each item, which is the most valuable information. 
+In the following plots, we show a part of categories with the largest number of categories in each group. The x axis represents categories, and the y axis represents number of each category.
+
+
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+
+library(ggplot2)
+category_count <- read.csv("./data/subcategories.csv")
+category_count <- transform(category_count, book_category=reorder(book_category, book_count))
+ggplot(category_count) + geom_bar(aes(x=book_category, y = book_count, fill = book_count), stat = "identity", position = "stack" ) +coord_flip() + ggtitle("Top 5 Categories in Book Group")
+
+
+category_count <- transform(category_count, music_category=reorder(music_category, music_count))
+ggplot(category_count) + geom_bar(aes(x=music_category, y = music_count, fill = music_count), stat = "identity", position = "stack" ) +coord_flip() + ggtitle("Top 5 Categories in Music Group")
+
+
+
+
+category_count <- transform(category_count, dvd_category=reorder(dvd_category, dvd_count))
+ggplot(category_count) + geom_bar(aes(x=dvd_category, y = dvd_count, fill = dvd_count), stat = "identity", position = "stack" ) +coord_flip() + ggtitle("Top 5 Categories in DVD Group")
+
+
+
+
+category_count <- transform(category_count, video_category=reorder(video_category, video_count))
+ggplot(category_count) + geom_bar(aes(x=video_category, y = video_count, fill = video_count), stat = "identity", position = "stack" ) +coord_flip() + ggtitle("Top 5 Categories in Video Group")
+
+
+```
+
+
+
+<br/>
+
+The top three categories in each groups are:
+
+* Books
+
+    + |Books|Children's books|Ages-|General
+
+    + |Books|Bussiness & Investing|General
+
+    + |Books|Reference|General
+  
+* Music
+
+    + |Music|Styles|Classical|General
+
+    + |Music|Styles|Jazz|General
+
+    + |Music|Styles|Rock|General
+    
+* DVD
+    
+    + |DVD|Speciality Stores|Studio specials|Warner Home Video|DVDs under $15
+
+    + |DVD|Speciality Stores|Studio specials|20th Century Fox Home Entertainment|Fox DVD Budget Store|DVDs Under $15
+
+    + |DVD|Special Features|Fully Loaded DVDs|DTS
+    
+    
+    
+* Video
+
+    + |Books, Music & Video for Parents|Parenting Books
+
+    + |Books, Music & Video for Parents|Pregnancy & Childbirth books
+ 
+    + |Books, Music & Video for Parents|Child-Developing books
+
+<br/>
+    
+Next, Let's take a look at co-purchasing network. For each item, the data set record the co-purchasing products with this item. We visualize them as a network with nodes as items and edges as co-purchasing relationship by using Gephi. Here is the general co-purchasing network.
+
+
+<br/>
+
+![](./pic/1.png)
+
+<br/>
+
+
+There are `548,552` nodes and `395,910` directed edges within this network. The distribution of the out-degree is shown as following plot:
+
+
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+library(reshape)
+mydata=read.csv("./data/similar.csv",header=TRUE)
+mydata=melt(mydata)
+ggplot(mydata,aes(x=reorder(variable,value),y=value))+geom_bar(fill="blue",alpha=0.5,stat='identity')+xlab("Number of Similar")+ylab("Count")
+```
+
+<br/>
+
+According to our statistics, most of nodes in network have 0 or 5 out-degree. However, since the maximum value of similar in this dataset is 5, one reasonable guess is that Amazon only record the top 5 similar items for each good. Thus, any good have more than 5 items will be regarded as only have 5 similar items.
+
+
+
+
+
+
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+
+
+
+#4.Executive Summary 
+<br/>
+
+Our analysis discovers some significant facts about the co-purchasing behavior, the relation between salesrank and rating and similar items, and category keywords for similar items.
+
+<br/>
+
+### (1) Co-purchasing clusters
+<br/>
+
+To explore the potential co-purchasing patterns of customers, we implement a cluster algorithm on our co-purchasing network. We visualize the results as following: 
+
+![](./pic/3.png)
+
+<br/>
+
+According to the output of algorithm, there are 9279 groups(clusters) within the networks. According to the definition of edges and definition of clusters, we know that items in the same clusters are more likely to be co-purchased together. After exploring the properties of items, we found that items in the same cluster tend to have similar categories. 
+
+To confirm this founding, we build a prediction model (wo do not show the model here) using random forest algorithm to predict if two items will be co-purchased by using their category similarity and title similarity as features. The model's output show that: items with similar categories and titles are more likely to be co-purchased by customers.
+
+<br/>
+
+###(2) Salesrank and rating correlation
+<br/>
+
+
+Salesrank and rating are two key variables in Amazon data, which denotes the popularity and quality of the products. It is worth to investigate the relation between popularity and quality. We have discovered an significant negative correlation between salesrank and rating, which means items in lower(i.e. larger) salesrank tend to have lower rating level. 
+
+Other than the average of rating in each salesrank sub-range, we also cares about the composition of rating levels. Because rating is a discrete value that measures the objective opinions from the customers, therefore mean of rating along cannot comprehensively reflect how customer's tend to rate for items with different popularity. The figure below displays the percentage of rating for different salesrank levels. For extremely large salesrank value, the percentage of 0.0 rating level is approaching 100%, while other rating levels will be of near zero percentage. In other words, for items with very low popularity, most of its rating would be 0.0. While for items with high popularity, which have small value in salesrank, 5 is the most frequent rating scores among the rating levels, following by 4.5 and 4.0. The percentage of rating at 0.0 is near 0%. That implies that people tend to rate the popular items highly, and unpopular items lowely.
+
+Another discovery from this figure is that people like to give extreme rating scores, and become more extreme when rating items they dislike. When people like an item, 5.0 rating is given by customers more frequently than other high rating levels such as 4.5 and 4. When people hate an item, they become more extreme, they will give zero rather than give 0.5, 1, 1.5,2, we cannot even find 0.5 rating in the data. In the figure, there doesn't exists the line for 0.5 rating level, and the line of 5.0 rating is almost always above all lines of other high rating levels, i.e, 4.5, 4.0, 3.5, 3.0. Similarly, the line of 0.0 rating is almost always above all lines of other low rating levels, such as 1.0, 1.5,  2.0, 2.5. In the contrast with high rating levels which has lines spread out around the space,  for low rating levels???rating 0.0 stands out and lines of other rating converges to 0%. 
+
+<br/>
+
+
+![](./pic/salesrank_rating.png)
+
+<br/>
+
+###(3) Category keywords for similar items
+<br/>
+
+
+Another interesting result we found is the relationship between the subcategories of co-purchasing items. Take the subcategories Book|Business as an example, after we input two words in our code: "Books" and "Business", we get the graph above. It means that, people who bought business books will also buy products related to the key words in the graph above. The bigger size a word has, the more frequently they have been co-purchased. For example, we can see that key words such as management, leadeship have relatively big frequency. So they are the most popular key words. Therefore, when applying into real world application, E-commerce website should recommend products related to these key words to people who have bought business books.
+
+![](./pic/wordCloudDemo0.png)
+
+
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+#5. Main Analysis
+<br/>
+
+### Preprocessing of Data
+<br/>
+
+The original data we get from the website is a text file of the following format for each record:
+Id:   1
+ASIN: 0827229534
+  title: Patterns of Preaching: A Sermon Sampler
+  group: Book
+  salesrank: 396585
+  similar: 5  0804215715  156101074X  0687023955  0687074231  082721619X
+  categories: 2
+   |Books[283155]|Subjects[1000]|Religion & Spirituality[22]|Christianity[12290]|Clergy[12360]|Preaching[12368]
+   |Books[283155]|Subjects[1000]|Religion & Spirituality[22]|Christianity[12290]|Clergy[12360]|Sermons[12370]
+  reviews: total: 2  downloaded: 2  avg rating: 5
+    2000-7-28  cutomer: A2JW67OY8U6HHK  rating: 5  votes:  10  helpful:   9
+    2003-12-14  cutomer: A2VE83MZF98ITY  rating: 5  votes:   6  helpful:   5
+    
+Since the txt file is very large of size 1.25GB, we use python to process our text file and for different part of analysis, we generate different data files to use. For the python code we used to process our data, please refer our github repo https://github.com/zst2821045/data_visualization.
+<br/>
+<br/>
+<br/>
+
+
+###(1) Group And Salesrank Analysis
+<br/>
+
+
+For the first two part of our main analysis, we aim to provide an overview of the relationship among groups, salesrank and rating. Therefore, we only extract the id of the records, the salesrank, the group it belongs to and the ratings from the data. Our data for these two part after preprocessing looks like this. We also observed from the data that there are 5868 records that don't contain the salesrank and rating information and there are 459 records with salesrank -1, according to the documentation, these records corresponding to the items that have not been sold. In our following analysis, we exclude these irregular data from our dataset. Originally, we want to make a missing data plot using R, however the dataset is too large, the missing pattern function cause R session to abort, therefore, we end up using R code to summarise missing data statistics.
+<br/>
+
+```{r}
+library(ggplot2)
+library(readr)
+original_data <- read.table("./data/id_overall.txt",sep = "\t",header = TRUE)
+data<-original_data[-5]
+head(data)
+```
+```{r}
+no_salesrank_data<-data[is.na(data$salesrank),]
+no_ratings_data<-data[is.na(data$rating),]
+no_group_data<-data[is.na(data$group),]
+irregular_data<-data[!is.na(data$salesrank)&data$salesrank==-1,]
+print(nrow(irregular_data))
+print(nrow(no_ratings_data))
+print(nrow(no_salesrank_data))
+print(nrow(no_group_data))
+```
+<br/>
+
+Using our intuition, we proposed that some groups maybe generally more popular than other groups. In the salesrank graph, more popular means that this group will have more items in the low salesrank group. Since the range of salesrank is very large from 1~950000, we cannot plot distribution of groups for every salesrank, therefore, we do preprocessing of the data and manually divided the salesrank into multiple groups which each group has a range of 50000. Another fact of the data which we observed in the previous section "Analysis of Data"" is that there are only a few records on groups, Baby Product, CE, Sports, Video Games, Software and Toy. Therefore, our analysis focus only on the four biggest group, which are Books, Videos, DVD and Music. When analyzing the salesrank, we notice that there are 459 items with salesrank -1, according to the documentation, this means that the item is not being sold, therefore we exclude them from our analysis.
+
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+
+data <- data %>% filter(group!="" | !is.na(rating) | !is.na(salesrank))
+data <- data %>% filter(salesrank>0)
+
+group <- unique(data$group)
+
+
+salesrank_sort=sort(unique(original_data$salesrank))
+salesrank_upper=salesrank_sort[length(salesrank_sort)]
+salesrank_lower=salesrank_sort[3]
+gap=50000
+data$rank_level_number=ceiling(data$salesrank/gap)
+rank_levels<-c(min(data$rank_level_number):max(data$rank_level_number))
+n_class<-length(rank_levels)
+max_rank_level<-max(rank_levels)
+if(n_class<=10){
+    x_axis_breaks<-rank_levels
+  } else{
+    duration <- floor(n_class/10)
+    n<- floor(n_class/duration)
+    x_axis_breaks<-c(1:n)*duration
+  }
+
+x_axis_labels<- format(c(x_axis_breaks*gap),scientific = TRUE)
+
+    
+ggplot(data, aes(x=rank_level_number,fill=group)) + geom_bar(position="stack",width = 1)+theme(axis.text.x=element_text(angle=90,hjust=1))+scale_x_continuous(breaks = c(x_axis_breaks+0.5),labels=x_axis_labels)+xlab('salesrank')
+```
+<br/>
+
+The above plot provide an overview of how groups are distributed in different salesrank class. Since the book group is significantly larger than other group, it consititues most of the propotion in any rank_class, we cannot observe any significant pattern indicate which group generally have a lower salesrank. Therefore, we split the graph based on different groups. And to account for the different size of groups, we compute the percentage of how many records in a particular rank_class for each of the four groups we are interested in.
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+library(scales)
+new_data=data[data$group=="Book"|data$group=="Video"|data$group=="DVD"|data$group=="Music",]
+ggplot(new_data, aes(x=rank_level_number)) + geom_bar(aes(color=group,fill=group,y=(..count..)/sum(..count..)))+theme(axis.text.x=element_text(angle=90,hjust=1))+facet_wrap(~group)+scale_y_continuous(labels=percent)+scale_x_continuous(breaks = c(x_axis_breaks+0.5),labels=x_axis_labels)+xlab('salesrank')
+```
+<br/>
+
+After we split the data by groups, we can observe the pattern for each group. For DVD and Video, most item have a salesrank less than 350000. Normally, we will assume that salesrank will be distributed uniformly, however, in this dataset, for all groups, there is a descending trend observed, which means that there are generally less items in larger salesrank groups in our dataset. Book has the largest salesrank range. However, looking at the y-axis, we found that if we only consider salesrank less than 50000, the propotion of each group in the data looks approximately the same, besides, the less than 50000 salesrank class is the largest class in any group. Therefore, we look at the data with salesrank less than 50000 and find out if there is any significant pattern. 
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+new_data_2=new_data[new_data$salesrank<50000,]
+ggplot(new_data_2,aes(x=group,y=salesrank))+geom_boxplot(aes(color=group))+theme(axis.text.x=element_text(angle=90,hjust=1))
+```
+<br/>
+
+From this graph, we can observe that the four group have roughly the same distribution of salesrank. DVD and Video have a slightly better median salesrank than book and music, but nothing significant that we need to keep mind of. Although we didn't find much significant facts on salesrank distribution and groups, this part of analysis gives us information on what we need to consider when exploring the relationship between salesrank and ratings in the following analysis. 
+<br/>
+<br/>
+<br/>
+
+
+###(2) Salesrank and Co-purchasing item analysis
+<br/>
+
+
+After having an overview of the salesrank and group distribution, we want to focus back on our main interest, which is the co-purchasing pattern in this dataset. In particular, one of the hypothesis is whether the popularity of one item is related to the its co-purchasing pairs. For this part of analysis, the data we use contains four columns, Id, salesrank, group and number of co-purchasing items.
+```{r,warning=FALSE, message=FALSE}
+library(readr)
+output <- read_csv("./data/output.csv")
+head(output)
+```
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+ggplot(output, aes(x=counts, y=salesrank)) +geom_point(shape=1,alpha=0.5)+labs(title="Salesrank VS Number of co-purchasing item pairs")
+```
+<br/>
+
+The graph shows us a clear pattern, an item with more similar items(co-purchasing pairs) have a lower salesrank, which means it's more popular. This has confirmed our hypothesis above. However, since our data contains too many items, it's hard to see the pattern of salesrank for items with counts less than 30. Another factor which may be correlated with the popularity of an item is the rating of this item. Therefore, in next section, we will examine the relationship between ratings and salesrank.
+<br/>
+<br/>
+<br/>
+
+
+
+###(3) Analysis on relation between Rating and Salesrank.
+<br/>
+
+* #### Overview on Rating Distribution
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+ggplot(data, aes(rating))+ geom_bar(aes(y = (..count..)/sum(..count..)))+ylab("density")+scale_x_continuous( breaks=seq(0,5,by=0.5))+ggtitle("Overall Rating Distribution")
+
+```
+<br/>
+
+
+We analyze the average rating of reviews for each item. They are discrete sequential numbers from 0 to 5, and increase by 0.5. The bar chart shows the distribution of average rating of items. From this figure, we can observe that average rating of extreme values, such as 5 and 0, have higher frequency. While the frequency of average ratings between 0.5 and 2.5 is very low. It is worth to notice that there doesn't exist 0.5 rating in the data. Most ratings are 0 or between 4 and 5. We can infer that if a customer hate an item, a zero rating are most likely to be given, rather than give 1 or 2; when customer like the item,  the item is very likely to gain a a rate equal or larger than 4.
+
+<br/>
+
+```{r}
+    data %>% filter(is.element(group,c('Book','Music','DVD','Video'))) %>% ggplot( aes(rating))+ geom_bar(aes(y = (..count..)/sum(..count..),fill=group), position='dodge')+ ylab("density")+scale_x_continuous(breaks=seq(0,5, by=0.5))+ggtitle("Rating Distribution for Major Groups")
+
+```
+
+<br/>
+
+
+Here we compare the rating distribution among 4 major groups, i.e. Book, DVD, Music and Video. Those groups have small density in the range of 0.5 to 2.5, and higher density value in two extreme value. For Book group, the low extreme rating 0 has highest density among all the rating, while Music group has more frequency on te rating of 5. DVD and video behaves alike comparing to Book and Music, among rating levels between 3.0 and 5.0, Music and Video group shows the highest frequency on 4.5 rather than 5.0. It implies that compared to Book and Music group, when users feel satsified for the items, DVD and Video items are more likely to gain a less strong praise on rating scores.
+
+<br/>
+<br/>
+<br/>
+
+* #### The Relation bewteen Rating and Salesrank
+<br/>
+
+
+
+```{r}
+
+    data_t <- data %>% select(salesrank, Id,rating,rank_level_number)%>% filter(!is.na(rating))%>%group_by(rank_level_number) %>%mutate(rank_missing=is.na(rating))%>%summarise(rating_mean=mean(rating,rm.na=TRUE),count_item=n(),count_missing=sum(rank_missing))
+    ggplot(data_t,aes(x=rank_level_number))+geom_line(aes(y=rating_mean),stat='identity', colour='red') +scale_x_continuous(breaks = c(x_axis_breaks+0.5),labels=x_axis_labels)+theme(axis.text.x=element_text(angle=90,hjust=1))+xlab('salesrank')+ggtitle("The Average of Rating again Salesrank")
+
+
+```
+<br/>
+
+The first image shows the mean of rating within each small salesrank group. The line is significately downward, implying tha salesrank and rating are negatively correlated. That agrees with the intuition, that items with good rating are more likely to be sold more.
+
+<br/>
+
+
+```{r}
+library(viridis)
+data_t1<-data %>% select(Id,rating,rank_level_number) %>%filter(!is.na(rating)) %>% group_by(rank_level_number,rating)
+data_t2<- data_t1%>%summarise(count_review=n())
+data_t3<- data_t2%>%group_by(rank_level_number)%>%summarise(count_sum=sum(count_review))%>%right_join(data_t2, by = "rank_level_number") %>% mutate(count_review_pct=count_review/count_sum)
+#png("./pic/salesrank_rating.png")
+ggplot(data_t3,aes(x=rank_level_number))+geom_line(aes(y=count_review_pct,colour=factor(rating),),stat='identity')+scale_color_viridis(discrete = TRUE)+scale_x_continuous(breaks = c(x_axis_breaks+0.5),labels=x_axis_labels)+theme(axis.text.x=element_text(angle=90,hjust=1))+xlab('salesrank')+ylab('percentaage of rating')+ ggtitle("The Percentage of Different Rating Levels against Salesrank")
+#dev.off()
+
+```
+<br/>
+
+
+This figure focus on the composition of rating within each salesrank group. Each line shows the percentage of a specific rating level among all the salesrank groups. The percentage of 0 rating is increasing when salesrank becomes larger, denoting that for items with smaller sales amount, the probability to gain a 0 mark on rating is significatly larger than items with smaller salesrank, in another word, larger sales amount. For the lines of high rating level, such as 5.0, 4.4, 4.0, the percentage of those rating levels in each salesrank group is decreasing with larger (i.e. "lower") salesrank. Items with good salesrank are more likely to receive high level rating, compared with items with lower (i.e. "larger") salesrank. 
+
+Other than the monotonicity of those lines, this figure also shows the distribution pattern of lines, which agrees with the discovery in the rating distribution overview, where extreme values in rating have higher frequency. In the figure, there doesn't exists the line for 0.5 rating level, and 1.0 to 2.5 has near zero frequency across different salesrank levels. In the high rating levels consisted of rating from 3.0 to 5.0, the line of 5.0  is almost always on the top everywhere. Similarly, in the low rating group from 0.0 to 2.5, the line of 0.0 is always on the top, and other low rating lines converges to 0% percentage.
+
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+###(4) Subcategories and Keyword Analysis
+<br/>
+
+* #### preprocessing of data
+<br/>
+
+We use Python to preprocess the original text data into csv data. We have three examples in this part. Each example has the similar way of processing. So we only take business book subset as an example:
+
+Firstly, we subset dataset into data only related to business books. Then we collect each product's categories (Let's call categories A), and the categories of this product's also-buy products correspondingly (Let's call categories B). To make the graph more clear, we simplify the names. If one category A is called "Books|Business & Investing|Management & Leadership|Management", we will shorten it into "Management & Leadership|Management".  If one category B is called "Books|Business & Investing|Finance|Finance & Investing", we will extract key words from it as "Finance" and "Investing". 
+
+So in the first step, we can transform the data into a csv file with two columns and many rows. The first column is the shortened category name of all business book products. The second column is the key words extracted from the categories of also-buy products of the categories in the first column. 
+
+Secondly, we count the categories in the first column and subset the top 20 categories with their respective count value. Also, we count the key words in the second column and subset the top 20 key words with their respective cound value. The processed data is like the following:
+
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+business_word <- read.csv("./data/business_count.csv")
+head(business_word)
+```
+
+<br/>
+
+In this part, we aim to study the category distribution among similar items. In other word, based on what product a customer has bought, we will study what categories of similar items he or she also buys. 
+
+Since the category name in the data is too redundant and too long, we study it by extrating key words. We process the data into the shape of many rows by two columns. Each row represents a category. The first column represents a category name, and the second column represents the key words of categories of similar items of the category in the first column. 
+
+To introduce the process in a simpler way: We can input one or two words, then get all the categories (let's call them original categories) including the one or two words. Then we can get similar items of original categories. Next we can get the categories of these similar items (let's call these categories new categories). Finally, we can extract the key words of new categories. 
+
+We mainly use the wordcloud package and shiny package to implement and visualize the process discussed above. The input is one or two words, and the output is a wordcloud. In the following, we will show several output of wordcloud. 
+
+
+<br/>
+
+* #### Books and Business
+
+```{r,warning=FALSE, message=FALSE}
+library(wordcloud)
+library(tm)
+business_word <- read.csv("./data/gen_business.csv")
+input_word="Books"
+new_data=business_word[which(grepl(input_word,business_word$Category)),]
+input_word2="Business"
+new_data=new_data[which(grepl(input_word2,new_data$Category)),]
+key_words=(new_data$Key_words)
+myCorpus = Corpus(VectorSource(key_words))
+myCorpus = tm_map(myCorpus, content_transformer(tolower))
+myCorpus = tm_map(myCorpus, removePunctuation)
+myCorpus = tm_map(myCorpus, removeNumbers)
+myDTM = TermDocumentMatrix(myCorpus,control = list(minWordLength = 1))
+m = as.matrix(myDTM)
+m=sort(rowSums(m), decreasing = TRUE)
+wordcloud(names(m)[0:30], m[0:30], max.words =35,scale=c(4,0.8), colors=brewer.pal(8, "Dark2"))
+```
+
+
+
+Since books related to business is among the top three categories in the book group, we query two words "Books" and "business" among all categories. We get some valuable key words, such as "investing", "leadership", "accounting", "office", "sales", "profession", "economics", "marketing", "finance", "management". We can see that people who bought business books will be interested in the related fields such as accouting, marketing and finance. They might also be interested in their profession development, office rule and company management. So in the website recommender system, we should recommend items related to accouting, marketing and finance fields or related to career development in business and company management for these people interested in business.
+
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+library(ggplot2)
+business_count <- read.csv("./data/business_count.csv")
+business_count <- transform(business_count, type=reorder(type, number) )
+ggplot(business_count) + geom_bar(aes(x=type, y = number, fill = number), stat = "identity", position = "stack" ) +coord_flip() 
+```
+<br/>
+
+We rank the categories related to business books by their count. We can see that the top three popular categories bought in business books are about Management, Leadership and Investing. So we can conclude that people in business field may pay more attention to management, leadership and investing. Management and leadership can contribute to promotion. Investing can contribution to wealth. 
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+business_count <- transform(business_count, Key_words=reorder(Key_words, num) )
+ggplot(business_count) + geom_bar(aes(x=Key_words, y = num, fill = num), stat = "identity", position = "stack" ) +coord_flip() + ggtitle('Top Key Words in the also-buy of Business Books')
+```
+<br/>
+
+We rank the key words in also-buy products related to business books by their count. We can see that people who bought business books will also buy products related to management, leadership and finance. 
+
+
+
+
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+* #### Video and Parenting
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+library(wordcloud)
+library(tm)
+parenting_word <- read.csv("./data/gen_parenting.csv")
+input_word="Video"
+new_data=parenting_word[which(grepl(input_word,parenting_word$Category)),]
+input_word2="Parenting"
+new_data=new_data[which(grepl(input_word2,new_data$Category)),]
+key_words=(new_data$Key_words)
+myCorpus = Corpus(VectorSource(key_words))
+myCorpus = tm_map(myCorpus, content_transformer(tolower))
+myCorpus = tm_map(myCorpus, removePunctuation)
+myCorpus = tm_map(myCorpus, removeNumbers)
+myDTM = TermDocumentMatrix(myCorpus,control = list(minWordLength = 1))
+m = as.matrix(myDTM)
+m=sort(rowSums(m), decreasing = TRUE)
+wordcloud(names(m)[0:50], m[0:50], scale=c(5,0.8), colors=brewer.pal(8, "Dark2"))
+```
+
+<br/>
+
+Since video related to parenting is among the top three categories in the video group, we query two words "Video" and "Parenting" among all categories. We get some valuable key words, such as "pregnancy", "teenagers", "childbirth", "education", "psychology", "childcare", "infantdevelopment", "toddler", "childdevelopment". We can see that people who bought books related to parenting will be concerned about all the things about their child in different periods, from the pregnancy period to infant period, and even to a teenager. They are also concerned about different aspects of children's growth and development, such as their psychology, education and selfhelp. We can also see that people buy more related books than music and videos. The DVDs number is the smallest. But maybe it's because the uneven distribution among the four groups in the data. So in the website recommender system, we should recommend the related items discussed above for these people. 
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+library(ggplot2)
+parenting_count <- read.csv("./data/parenting_count.csv")
+parenting_count <- transform(parenting_count, type=reorder(type, number) )
+ggplot(parenting_count) + geom_bar(aes(x=type, y = number, fill = number), stat = "identity", position = "stack" ) +coord_flip() + ggtitle('Top categories in Parenting Videos')
+```
+
+<br/>
+
+We rank the categories related to parenting videos by their count. We can see that the top three popular categories bought in parenting videos are about infant toddlers, childcare and infant development. So we can conclude that parents may pay more attention to baby's toddlers, childcare and bady's development. New parents often pay more attention to their baby and want to learn more. So maybe this is the reason why products about infants are very popular.
+
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+parenting_count <- transform(parenting_count, Key_words=reorder(Key_words, num) )
+ggplot(parenting_count) + geom_bar(aes(x=Key_words, y = num, fill = num), stat = "identity", position = "stack" ) +coord_flip() + ggtitle('Top Key Words in the also-buy of Parenting Video')
+```
+
+<br/>
+
+We rank the key words in also-buy products related to parenting videos by their count. We can see that people who bought business books will also buy products related to childcare, child-Development and infant-development.
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+
+* #### Music and Classical
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+library(wordcloud)
+library(tm)
+classical_word <- read.csv("./data/gen_classical.csv")
+input_word="Music"
+new_data=classical_word[which(grepl(input_word,classical_word$Category)),]
+input_word2="Classical"
+new_data=new_data[which(grepl(input_word2,new_data$Category)),]
+key_words=(new_data$Key_words)
+myCorpus = Corpus(VectorSource(key_words))
+myCorpus = tm_map(myCorpus, content_transformer(tolower))
+myCorpus = tm_map(myCorpus, removePunctuation)
+myCorpus = tm_map(myCorpus, removeNumbers)
+myDTM = TermDocumentMatrix(myCorpus,control = list(minWordLength = 1))
+m = as.matrix(myDTM)
+m=sort(rowSums(m), decreasing = TRUE)
+wordcloud(names(m)[0:40], m[0:40], scale=c(4,0.8), colors=brewer.pal(8, "Dark2"))
+```
+<br/>
+
+We query two words "Music" and "Classical" among all categories. Then we get some valuable key words, such as "orchestra", "ballets", "baroque", "amadeus", "mozart", "handel", "bach", "etudes", "concertos", "sonatas", "opera", "keyboardchamber" and so on. We can see that people who love classical music are more likely to love composers such as Mozart, Handel, Bach. They are also likely to love musical pieces like Revolutionary Etude or films like amadeus. So if a customer bought products related to classical music, the website should recommend books related to composers like Mozart,Handel, Bach, musical pieces like Revolutionary Etude, films like amadeus.
+
+
+
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+library(ggplot2)
+classical_count <- read.csv("./data/classical_count.csv")
+classical_count <- transform(classical_count, type=reorder(type, number) )
+ggplot(classical_count) + geom_bar(aes(x=type, y = number, fill = number), stat = "identity", position = "stack" ) +coord_flip() + ggtitle('Top categories of Classical Music')
+```
+<br/>
+
+We rank the categories related to classical music by their count. We can see that the top three popular categories bought in classical music are about historical periods, concertos and baroque. So we can conclude that people who love classical music will be more interested in Baroque style, historical periods and concertos.
+
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+classical_count <- transform(classical_count, Key_words=reorder(Key_words, num))
+ggplot(classical_count) + geom_bar(aes(x=Key_words, y = num, fill = num), stat = "identity", position = "stack" ) +coord_flip() + ggtitle('Top Key Words in the also-buy of Classical Music')
+```
+<br/>
+
+We rank the key words in also-buy products related to classical music by their count. We can see that people who bought classical music will also buy products related to opera, Symphonies and instruments.
+
+
+
+
+
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+
+###(5) Similar Network Analysis
+<br/>
+
+As we discussed before, the similar network contains valuable information which can help company understand the co-purchasing patterns. Thus, we use Gephi to do further study of the network. At first, let's take a look at the full graph.
+
+<br/>
+
+
+
+![](./pic/2.png)
+
+<br/>
+
+In this graph, each node represent one item and each edge represent one co-purchasing relationship. The size of nodes depends on their degree. We can observe that there are some super nodes in the graph. We will explore them latter. The distributions of nodes degree are shown as following:
+<br/>
+
+
+![](./pic/output/1/degree-distribution.png)
+<br/>
+
+We observe that most of nodes (around 25,000) are isolated nodes(0 degree), which means that most of items on Amazon do not have obvious co-purchasing relationship. Since we only care about the items which have co-purchasing records, we decide to remove all isolated nodes. After removing isolated nodes, there are `148783` nodes and `395910` edges left in graph. Here is the distribution of degree(We do not plot some outliers in this plot):
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+nodes=read_csv("./data/network - cluster [Nodes].csv")
+ggplot(nodes, aes(x=degree,fill=group)) + geom_histogram(binwidth=1)+xlim(0,50)+ggtitle("Degree")
+ggplot(nodes, aes(x=indegree,fill=group)) + geom_histogram(binwidth=1)+xlim(0,50)+ggtitle("In-Degree")
+ggplot(nodes, aes(x=outdegree,fill=group)) + geom_histogram(binwidth=1)+xlim(0,5)+ggtitle("Out-Degree")
+```
+<br/>
+
+After analyze the network, we can list the top 5 co-purchasing popular items:
+
+|Title                                         |Group|In-degree|Out-degree|Degree    |
+|----------------------------------------------|-----|---------|----------|----------|
+|Laura	                                       |DVD  |495      |0         |495       |
+|The Crawling Eye (Widescreen European Edition)|DVD  |110      |4         |103       |
+|Zombie                                        |DVD  |101      |2         |94        |
+|Kind of Blue	                                 |Music|90       |4         |92        |
+|Beethoven                                     |Music|87       |5         |90        |
+
+<br/>
+
+We can observe that all top 5 popular items are DVD and music. It makes sense since people tend to buy multiple DVD and Music at same time. The first prize `Laura` is a classic mystery movie which was produced in 1944. The second prize `The Crawling Eye` is a 1958 British black-and-white science fiction film. The third prize `zombie` is a 1979 zombie film directed by Lucio Fulci. `Kind of Blue` is a studio album by American jazz trumpeter, composer, and bandleader Miles Davis, which has been regarded as jazz's greatest record. The fifth is immortal masterpiece of Beethoven.
+
+We visualize the neighbors of `Laura` to figure out what kind of items that people like to buy with `Laura`
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+neighbor=read_csv("./data/laura.csv")
+ggplot(neighbor, aes(x=group,fill=group)) + geom_bar()+ggtitle("Co-purchased items with Laura")
+```
+
+<br/>
+
+The distribution of co-purchased items of `Kind of Blue` is shown as following:
+<br/>
+
+```{r,warning=FALSE, message=FALSE}
+blue=read_csv("./data/blue.csv")
+ggplot(blue, aes(x=group,fill=group)) + geom_bar()+ggtitle("Co-purchased items with Laura")
+```
+
+<br/>
+
+
+From the two plots above, we find that only video and DVD items would be co-purchased with film `Laura` and only Music items would be co-purchased with album `Kind of Blue`. Thus, we can guess that: people prefer to co-purchase items which are in the same category. 
+
+Since company like Amazon may interest in the answer of question "what kind of pairs of items that customers prefer to co-purchase?", we decide to implement a cluster algorithm on our network.Here is the visulization of cluster result. The size of nodes represent the degree and the colors of nodes represent the clusters they belong to:
+
+<br/>
+
+
+![](./pic/3.png)
+
+<br/>
+
+As we state above in chapter 4,items in the same cluster are more likely to be co-purchased with each other. In other words, items in the same clusters are more similar with each other than the items in other clusters.
+
+We can observe that there are three main clusters in the network: dark green, light green, and white. Totally, there are 9279 clusters within the networks. And the distribution of clusters' size is shown as following:
+
+<br/>
+
+![](./pic/output/4/communities-size-distribution.png)
+
+<br/>
+
+Since the the most popular co-purchasing item `Laura` belong to cluster `9270`, we choose it to learn more.
+<br/>
+
+
+```{r,warning=FALSE, message=FALSE}
+cluster1=read_csv("./data/cluster-9270.csv")
+ggplot(cluster1, aes(x=group,fill=group)) + geom_bar()+ggtitle("Cluster 9270")
+```
+
+<br/>
+
+The distribution of groups in cluster 9270 is different with the distribution of groups in the whole network. In cluster 9270, Music items play the main role, which exceed Book items(Books items are the most items in the whole network). We think it is because Music items are more likely to connect to `Laura`, which is a classic film with brilliant theme song of same name `Laura`.
+<br/>
+
+After exploring the title,category, and rating information of the items in the same cluster, we found that co-purchasing items tend to have similar category and title. To confirm this founding, we use Random Forest algorithm to build a classification model to predict if two items would be co-purchased by customers based their category similarity and title similarity. Finally, the model can predict all of the co-purchasing relationships with 90% accuracy. Thus, we can conclude that: items with similar categories and titles are more likely to be co-purchased by customers.
+
+
+
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+
+
+
+
+
+
+
+#6. Conclusion
+<br/>
+
+  For this dataset, we analyzed the general distribution of each variable, the relationships between groups, salesrank and ratings and we found some interesting result on the ratings and salesrank distribution We also look at different subcategories and explore the subcategory distribution among similar items. However, as we have pointed out in the introduction, the most interesting feature about the dataset is the co-purchasing pattern. Gephi plot provides an overview of how the purchasing records are related, however, it doesn't allow us zoom into the graph and look specifically at every item and what are its co-purchasing items. 
+  Another problem is that since the dataset is very big. It's hard to process the data using R, a lot of interesting graphs such as heatmap and missing pattern plot cannot be displayed for our dataset. It puts a lot of limitation on what we can show about this dataset. 
+<br/>
+
+  For the future step, we can focus more on the relationships between specific item pairs, for example, what is a good indicator of potential similar items? Can the title, group and subcategories of two items determine their similarity?  Furthermore, we can use this dataset to do modeling and recommandation. For exxample, for a particular item, what may be its most likely co-purchasing item. Companies can use the same technique to make recommendation for customers. And this will be where its business value lies. 
+
+
+
+
+
